@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>产品发货单</title>
+<style>
+  body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;margin:0;background:#f5f5f4;color:#1c1917;}
+  .wrap{max-width:720px;margin:0 auto;padding:16px;}
+  .card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  h1{font-size:18px;margin:0 0 12px;text-align:center;}
+  .meta{display:grid;grid-template-columns:88px 1fr;gap:6px 8px;font-size:14px;margin-bottom:14px;}
+  .meta b{color:#57534e;font-weight:500;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{border:1px solid #e7e5e4;padding:8px;text-align:left;}
+  th{background:#fafaf9;}
+  .foot{margin-top:12px;font-size:12px;color:#78716c;text-align:center;}
+  .err{color:#b91c1c;padding:24px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="app"><p class="err">正在读取发货单…</p></div></div>
+<script>
+(function(){
+  function b64urlToUtf8(s){
+    s = s.replace(/-/g,'+').replace(/_/g,'/');
+    while(s.length%4) s+='=';
+    var bin = atob(s);
+    var bytes = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  function parseText(text){
+    var lines = text.split(/\r?\n/);
+    var meta={}, items=[], mode='meta';
+    lines.forEach(function(line){
+      line=line.trim();
+      if(!line) return;
+      if(line.indexOf('——明细——')===0){ mode='items'; return; }
+      if(line.indexOf('——合计——')===0){ mode='sum'; return; }
+      if(line.indexOf('（扫码')===0) return;
+      if(line.indexOf('【产品发货单')===0){ meta.title=line; return; }
+      if(mode==='meta'){
+        var i=line.indexOf('：');
+        if(i>0) meta[line.slice(0,i)] = line.slice(i+1);
+      } else if(mode==='items'){
+        // 1. 订单X | 物料Y | 名称 | 400pcs | 3箱
+        var m=line.match(/^\d+\.\s*订单(.+?)\s*\|\s*物料(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)$/);
+        if(m) items.push({po:m[1],sku:m[2],name:m[3],qty:m[4],boxes:m[5]});
+      } else if(mode==='sum'){ meta.sum=line; }
+    });
+    return {meta:meta, items:items};
+  }
+  function render(data){
+    var m=data.meta, rows=data.items.map(function(it,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+it.po+'</td><td>'+it.sku+'</td><td>'+it.name+'</td><td>'+it.qty+'</td><td>'+it.boxes+'</td></tr>';
+    }).join('');
+    document.getElementById('app').innerHTML =
+      '<h1>产品发货单</h1><div class="meta">'
+      +[['发货单位','收货单位','收件人','联系电话','收件地址','发货日期','供应商代码','发件人','发件人电话']].map(function(){return '';})[0]
+      +['发货单位','收货单位','收件人','联系电话','收件地址','发货日期','供应商代码','发件人','发件人电话'].map(function(k){
+        return m[k] ? '<b>'+k+'</b><div>'+m[k]+'</div>' : '';
+      }).join('')
+      +'</div><table><thead><tr><th>序号</th><th>采购订单号</th><th>物料号</th><th>物料名称</th><th>数量</th><th>箱数</th></tr></thead><tbody>'
+      +rows+'</tbody></table>'
+      +(m.sum?'<p style="margin-top:10px;font-size:14px;">'+m.sum+'</p>':'')
+      +'<p class="foot">上海宜镁华新材料有限公司 · 扫码查看</p>';
+  }
+  try{
+    var h=(location.hash||'').replace(/^#/, '');
+    if(!h){ document.getElementById('app').innerHTML='<p class="err">二维码缺少发货单数据</p>'; return; }
+    var text = b64urlToUtf8(decodeURIComponent(h));
+    render(parseText(text));
+  }catch(e){
+    document.getElementById('app').innerHTML='<p class="err">无法解析发货单数据</p>';
+  }
+})();
+</script>
+</body>
+</html>
